@@ -1,6 +1,8 @@
 import { Selector } from 'testcafe';
 
 let id = 0;
+const URL = 'http://localhost:3000/devices/';
+
 const deviceMainBox = Selector('div.device-main-box');
 const deviceNames = Selector('span.device-name');
 const deviceType = Selector('span.device-type');
@@ -81,56 +83,59 @@ test('Click ADD DEVICE button', async t => {
     console.log(`Nuevo dispositivo con Almacenamiento correcto`);
 });
 
-test('Test Edit button', async t => {
+test('Update device data  API', async t => {
+    // Get the list of devices
+    const listaInicial = await t.request(URL);
+    const listDevices = listaInicial.body;
   
-  // Click en le boton ADD DEVICE
-  await t.click(Selector('#root > div > div > div.list-devices-main > div > div:nth-child(1) > div.device-options > a'));
-
-
-  // Rellenar y seleccionar los campos
-  const inputElement = Selector('#system_name');
-  await t.selectText(inputElement).pressKey('delete');
-  await t.typeText('#system_name', 'Rename Device');
-
-  // Click en  UPDATE button
-  await t.click(Selector('button').withText('UPDATE'));
-
-  // Verifica que existe el dispositivo Rename Device
-  await t.wait(1000);
-  await t.expect(deviceMainBox.withText('Rename Device').exists).ok('No se encontro el dispositivo');
-  console.log(`El dispositivo "Rename Device" existe en la pagina.`);
-});
+    // Sort devices by hdd_capacity
+    listDevices.sort((a, b) => a.hdd_capacity - b.hdd_capacity);
+  
+    // Get the first element
+    const firstDevice = listDevices[0];
+  
+    const updateData = { id,system_name,type,hdd_capacity } = firstDevice;  
+  
+    updateData [system_name] = 'Rename Device';
+    
+    // Send the PUT request with updated data and headers
+    var changeName = await t.request.put(URL + id,
+      {headers: { 'Content-Type': 'application/json' },body: JSON.stringify(updateData)
+    });
+  
+    // Check that the update was successful
+    const updatedDevice = await Selector('#device-info').textContent;
+    await t.expect(updatedDevice).contains(updateData.system_name);
+    await t.expect(updatedDevice).contains(updateData.type);
+    await t.expect(updatedDevice).contains(updateData.hdd_capacity);
+  
+  });
 
 test('Remove last device from the list', async t => {
- 
-    let name = '';
+    // Get the list of devices
+    const deviceListResponse = await t.request(URL);
+    const listDevices = deviceListResponse.body;
 
+    // Sort devices by hdd_capacity
+    listDevices.sort((a, b) => a.hdd_capacity - b.hdd_capacity);
 
+    // Get the last device ID
+    const lastDevice = listDevices[listDevices.length - 1];
+    const { id,system_name } = lastDevice;
+
+    // Construct the DELETE request URL with the last device ID
+    const deleteUrl = `${URL}${id}`;
+
+    // Make the DELETE request
+    var deleteResponse = await t.request.delete(deleteUrl);
+
+    // Reload the page
+    await t.eval(() => location.reload(true));
     await t.wait(1000);
 
-    const count = await deviceMainBox.count;
-    
-    let listaUpdate = [];
+    // Assert that the status code is (No Content)
+    deleteResponse = deleteResponse + "/";
+    await t.expect(deleteResponse.body).eql();
+    console.log("Se elimino el dispositivo: " + system_name + " Con el ID: " + id);
 
-    for (let i = 0; i < count; i++) {
-         name = await deviceNames.nth(i).innerText;
-         const type = await deviceType.nth(i).innerText;
-         const capacity = await deviceCapacity.nth(i).innerText;
-         id = i;
-
-        listaUpdate.push({ id, name, type, capacity });
-    }
-
-    // Obtener el ID del último dispositivo de la lista
-    const lastDevice = listaUpdate[listaUpdate.length - 1];
-    const { id2, name2 } = lastDevice;
-    console.log(`Eliminando el dispositivo "${name}" con ID: ${id}`);
-  
-    // Hacer clic en el botón "Remove" del último dispositivo
-    await t.click(`#root > div > div > div.list-devices-main > div > div:nth-child(${id+1}) > div.device-options > button`);
-  
-    // Verificar que el dispositivo ya no existe en la página
-    await t.wait(1000);
-    await t.expect(deviceMainBox.withText(name).exists).notOk();
-    console.log(`El dispositivo "${name}" fue eliminado de la lista.`);
 });
